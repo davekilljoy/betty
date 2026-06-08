@@ -1,6 +1,6 @@
 # Fly config. `fly launch --no-deploy` then `fly volumes create betty_data --size 1`,
 # then `fly deploy`. The volume keeps the SQLite file across restarts.
-app = "betty-r5jqpq"
+app = "betty-app"
 primary_region = "iad"
 
 [build]
