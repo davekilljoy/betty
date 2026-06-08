@@ -1,0 +1,19 @@
+{
+  "name": "betty",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sleeper-backed play-money book for a fantasy league",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "ingest": "node src/cli.js ingest",
+    "settle": "node src/cli.js settle",
+    "demo": "node src/cli.js demo"
+  },
+  "dependencies": {
+    "@fastify/static": "^7.0.4",
+    "better-sqlite3": "^11.8.1",
+    "fastify": "^4.28.1"
+  },
+  "engines": { "node": ">=20" }
+}

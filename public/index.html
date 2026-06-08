@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>betty — the league book</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://sleepercdn.com" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">betty<span class="dot">.</span></div>
+    <div class="brand-sub">the league book · <span id="leagueName">Cope &amp; Rebuild</span></div>
+    <div id="who" class="who">
+      <input id="username" placeholder="your username" maxlength="20" autocomplete="off" spellcheck="false" />
+      <button id="loginBtn" class="btn">enter</button>
+    </div>
+    <div id="wallet" class="wallet hidden">
+      <span class="meName" id="meName"></span>
+      <div class="stat"><label>bankroll</label><b id="meBal" class="gold">—</b></div>
+      <div class="stat"><label>season</label><b id="mePnl">—</b></div>
+      <button id="logoutBtn" class="btn ghost">switch</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="board">
+      <div class="board-head">
+        <h2>The Board <span id="weekTag" class="tag"></span></h2>
+        <span id="marketCount" class="count"></span>
+      </div>
+
+      <div class="controls">
+        <div class="segmented" id="posFilter" role="tablist" aria-label="position">
+          <button class="seg active" data-pos="ALL">All</button>
+          <button class="seg" data-pos="QB">QB</button>
+          <button class="seg" data-pos="RB">RB</button>
+          <button class="seg" data-pos="WR">WR</button>
+          <button class="seg" data-pos="TE">TE</button>
+        </div>
+        <div class="control-search">
+          <svg viewBox="0 0 24 24" class="ic"><path d="M21 21l-4.3-4.3M19 11a8 8 0 11-16 0 8 8 0 0116 0z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <input id="search" placeholder="search player" autocomplete="off" spellcheck="false" />
+        </div>
+        <label class="select">team
+          <select id="teamFilter"><option value="">all</option></select>
+        </label>
+        <label class="select">sort
+          <select id="sortBy">
+            <option value="proj_desc">projection ↓</option>
+            <option value="proj_asc">projection ↑</option>
+            <option value="name">name A–Z</option>
+            <option value="team">team</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="gamesStrip" class="games-strip"></div>
+      <div id="markets" class="market-list"></div>
+    </section>
+
+    <aside class="rail">
+      <section class="panel feed-panel">
+        <h2>Live Feed <span class="live" title="live"></span></h2>
+        <div id="feed" class="feed"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Leaderboard</h2>
+        <ol id="leaderboard" class="leaderboard"></ol>
+      </section>
+    </aside>
+  </main>
+
+  <!-- bet slip -->
+  <div id="slip" class="slip hidden" aria-live="polite">
+    <div class="slip-head">
+      <span id="slipTitle">Bet Slip</span>
+      <button id="slipClear" class="link">clear</button>
+    </div>
+    <div id="slipLegs" class="slip-legs"></div>
+    <div class="slip-foot">
+      <div class="odds-row"><span>combined odds</span><b id="slipOdds">—</b></div>
+      <div class="stake-row">
+        <div class="stake-input">
+          <span class="dollar">$</span>
+          <input id="stake" type="number" min="1" step="1" inputmode="numeric" placeholder="stake" />
+        </div>
+        <span class="towin">to win <b id="slipToWin">—</b></span>
+      </div>
+      <div class="quickstakes">
+        <button data-q="25">25</button><button data-q="50">50</button>
+        <button data-q="100">100</button><button data-q="max">max</button>
+      </div>
+      <button id="placeBtn" class="btn place">place bet</button>
+      <div id="slipErr" class="err"></div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

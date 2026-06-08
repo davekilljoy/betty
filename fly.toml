@@ -1,0 +1,28 @@
+# Fly config. `fly launch --no-deploy` then `fly volumes create betty_data --size 1`,
+# then `fly deploy`. The volume keeps the SQLite file across restarts.
+app = "betty"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "3000"
+  BETTY_DB = "/data/betty.db"
+  BETTY_LEAGUE_ID = "1312071038443454464"
+  # BETTY_WEEK unset => preseason (period 0, one-time $1k lump).
+
+[mounts]
+  source = "betty_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1   # keep 1 up so the settle/freeze loop runs
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
