@@ -153,7 +153,9 @@ function renderMarket(m) {
   const overs = m.rungs.filter((r) => r.side === 'OVER').sort((a, b) => a.threshold - b.threshold);
   const pos = m.position.toLowerCase();
   const logo = m.team ? `<img class="teamlogo" width="18" height="18" src="${LOGO(m.team)}" loading="lazy" onerror="this.remove()" alt="">` : '';
-  const opp = m.opponent ? `<span class="opp">${m.is_home ? 'vs' : '@'} ${m.opponent}</span>` : '<span class="opp bye">BYE</span>';
+  const opp = m.opponent
+    ? `<span class="opp"><span class="vs">${m.is_home ? 'vs' : '@'}</span><img class="opplogo" width="16" height="16" src="${LOGO(m.opponent)}" loading="lazy" onerror="this.style.display='none'" alt="">${m.opponent}</span>`
+    : '<span class="opp bye">BYE</span>';
   return `<div class="market">
     <div class="player">
       <span class="avatar ${pos}">${initials(m.player_name)}

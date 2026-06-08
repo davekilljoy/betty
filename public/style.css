@@ -144,7 +144,9 @@ main { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.9
 .pos.qb { background: var(--qb); } .pos.rb { background: var(--rb); } .pos.wr { background: var(--wr); } .pos.te { background: var(--te); }
 .teamlogo { width: 16px; height: 16px; object-fit: contain; flex: none; }
 .pteam { color: var(--dim); font-size: 12px; font-weight: 600; }
-.opp { color: var(--faint); font-size: 12px; }
+.opp { display: inline-flex; align-items: center; gap: 4px; color: var(--faint); font-size: 12px; }
+.opp .vs { color: var(--faint); }
+.opplogo { width: 16px; height: 16px; object-fit: contain; flex: none; }
 .opp.bye { font-style: italic; }
 
 /* the ladder reads as a number line: unders | projection | overs */
