@@ -4,9 +4,14 @@ const api = (p, opts) => fetch(p, opts).then((r) => r.json());
 const AV = (id) => `https://sleepercdn.com/content/nfl/players/thumb/${id}.jpg`;
 const LOGO = (t) => `https://sleepercdn.com/images/team_logos/nfl/${String(t).toLowerCase()}.png`;
 
+const MAV = (a) => (a ? `https://sleepercdn.com/avatars/thumbs/${a}` : null); // manager avatar
+
 let me = localStorage.getItem('betty_user') || null;
+let mode = 'players';            // 'players' | 'managers'
 let allMarkets = [];
-const slip = new Map(); // rungId -> {player_name, side, threshold, odds}
+let allMatchups = [];
+const slip = new Map();  // player rungId -> {player_name, side, threshold, odds}
+const mslip = new Map(); // matchup rungId -> {label, odds, matchup_id, pick_roster}
 const filters = { pos: 'ALL', team: '', sort: 'proj_desc', search: '', game: null };
 const POS_ORDER = ['QB', 'RB', 'WR', 'TE'];
 
@@ -177,14 +182,30 @@ function renderMarket(m) {
   </div>`;
 }
 
+// Surgical selection — toggle the chip's class only. NO board re-render (which would
+// reload avatars and reset ladder scroll). renderMarket() reapplies .sel on filter changes.
 function toggleRung(el) {
   const id = Number(el.dataset.id);
-  if (slip.has(id)) slip.delete(id);
-  else {
-    for (const [rid, leg] of slip) if (leg.player_name === el.dataset.name) slip.delete(rid);
+  if (slip.has(id)) {
+    slip.delete(id);
+    el.classList.remove('sel');
+  } else {
+    // one line per player: drop any existing leg on the same player (slip + its chip)
+    for (const [rid, leg] of slip) {
+      if (leg.player_name === el.dataset.name) {
+        slip.delete(rid);
+        document.querySelector(`.rung[data-id="${rid}"]`)?.classList.remove('sel');
+      }
+    }
     slip.set(id, { player_name: el.dataset.name, side: el.dataset.side, threshold: Number(el.dataset.th), odds: Number(el.dataset.odds) });
+    el.classList.add('sel');
   }
-  renderBoard(); renderSlip();
+  renderSlip();
+}
+
+// remove all selected-chip highlighting without rebuilding the board
+function clearSelections() {
+  document.querySelectorAll('.rung.sel, .pickchip.sel').forEach((e) => e.classList.remove('sel'));
 }
 
 // --- controls ---
@@ -196,23 +217,105 @@ $('#teamFilter').onchange = (e) => { filters.team = e.target.value; renderBoard(
 $('#sortBy').onchange = (e) => { filters.sort = e.target.value; renderBoard(); };
 $('#search').oninput = (e) => { filters.search = e.target.value.trim().toLowerCase(); renderBoard(); };
 
-// --- bet slip ---
-const combinedOdds = () => [...slip.values()].reduce((a, l) => a * l.odds, 1);
+// --- mode switch: players <-> managers ---
+$('#modeSwitch').querySelectorAll('.mode').forEach((b) => (b.onclick = () => {
+  if (mode === b.dataset.mode) return;
+  $('#modeSwitch .mode.active')?.classList.remove('active');
+  b.classList.add('active');
+  mode = b.dataset.mode;
+  $('#playersView').classList.toggle('hidden', mode !== 'players');
+  $('#managersView').classList.toggle('hidden', mode !== 'managers');
+  $('#boardTitle').firstChild.textContent = mode === 'players' ? 'The Board ' : 'Matchups ';
+  $('#weekTag').classList.toggle('hidden', mode !== 'players');
+  if (mode === 'managers') renderMatchups(); else renderBoard();
+}));
+
+// --- matchups (H2H) board ---
+async function loadMatchups() {
+  const { matchups } = await api('/api/matchups');
+  allMatchups = matchups;
+  if (mode === 'managers') renderMatchups();
+}
+function mChip(m, r, name) {
+  const line = r.kind === 'ml' ? 'ML' : (r.spread > 0 ? `-${r.spread}` : `+${-r.spread}`);
+  const sel = mslip.has(r.id) ? ' sel' : '';
+  return `<button class="pickchip${sel}${r.kind === 'ml' ? ' ml' : ''}" data-id="${r.id}" data-mcard="${m.id}"
+      data-name="${esc(name)}" data-line="${line}" data-odds="${r.odds}">
+      <span class="pl">${line}</span><span class="po">${american(r.odds)}</span></button>`;
+}
+function managerRow(m, side) {
+  const isA = side === 'A';
+  const name = isA ? m.manager_a : m.manager_b;
+  const av = isA ? m.avatar_a : m.avatar_b;
+  const roster = isA ? m.roster_a : m.roster_b;
+  const proj = isA ? m.proj_a : m.proj_b;
+  const pct = Math.round((isA ? m.win_prob_a : 1 - m.win_prob_a) * 100);
+  const fav = pct >= 50 ? ' fav' : '';
+  const rungs = m.rungs.filter((r) => r.pick_roster === roster)
+    .sort((a, b) => (a.kind === 'ml' ? -1 : b.kind === 'ml' ? 1 : a.spread - b.spread));
+  const avatar = `<span class="mav">${esc(initials(name))}${av ? `<img class="face" src="${MAV(av)}" loading="lazy" onerror="this.remove()" alt="">` : ''}</span>`;
+  return `<div class="mteam">
+    <div class="minfo">${avatar}
+      <div class="mname-wrap"><span class="mname">${esc(name)}</span>
+        <span class="mproj">${proj} proj<span class="mpct${fav}">${pct}%</span></span></div>
+    </div>
+    <div class="mchips">${rungs.map((r) => mChip(m, r, name)).join('')}</div>
+  </div>`;
+}
+function renderMatchups() {
+  const el = $('#matchups');
+  $('#marketCount').textContent = `${allMatchups.length} matchup${allMatchups.length === 1 ? '' : 's'}`;
+  el.innerHTML = allMatchups.length
+    ? allMatchups.map((m) => `<div class="matchup">${managerRow(m, 'A')}<div class="mdivider"><span>vs</span></div>${managerRow(m, 'B')}</div>`).join('')
+    : '<div class="board-empty">No matchups scheduled this week.</div>';
+  el.querySelectorAll('.pickchip').forEach((c) => (c.onclick = () => toggleMRung(c)));
+}
+function toggleMRung(el) {
+  const id = Number(el.dataset.id);
+  if (mslip.has(id)) { mslip.delete(id); el.classList.remove('sel'); }
+  else {
+    const card = el.dataset.mcard;       // one pick per matchup
+    for (const [rid, leg] of mslip) {
+      if (leg.mcard === card) { mslip.delete(rid); document.querySelector(`.pickchip[data-id="${rid}"]`)?.classList.remove('sel'); }
+    }
+    mslip.set(id, { name: el.dataset.name, line: el.dataset.line, odds: Number(el.dataset.odds), mcard: card });
+    el.classList.add('sel');
+  }
+  renderSlip();
+}
+
+// --- bet slip (player props + matchup picks) ---
+const combinedOdds = () => [...slip.values(), ...mslip.values()].reduce((a, l) => a * l.odds, 1);
+function slipEntries() {
+  return [
+    ...[...slip].map(([id, l]) => ({ id, kind: 'p',
+      player: esc(l.player_name), line: `${l.side === 'OVER' ? 'o' : 'u'}${l.threshold}`,
+      lineCls: l.side === 'OVER' ? 'ov' : 'un', odds: l.odds })),
+    ...[...mslip].map(([id, l]) => ({ id, kind: 'm',
+      player: esc(l.name), line: l.line, lineCls: 'mm', odds: l.odds })),
+  ];
+}
 function renderSlip() {
   const box = $('#slip');
-  if (slip.size === 0) return box.classList.add('hidden');
+  const entries = slipEntries();
+  if (entries.length === 0) return box.classList.add('hidden');
   box.classList.remove('hidden');
-  $('#slipTitle').textContent = slip.size > 1 ? `${slip.size}-Leg Parlay` : 'Bet Slip';
-  $('#slipLegs').innerHTML = [...slip].map(([id, l]) => `
+  $('#slipTitle').textContent = entries.length > 1 ? `${entries.length}-Leg Parlay` : 'Bet Slip';
+  $('#slipLegs').innerHTML = entries.map((e) => `
     <div class="slleg">
       <span class="sl-main">
-        <span class="sl-player">${esc(l.player_name)}</span>
-        <span class="sl-line"><span class="${l.side === 'OVER' ? 'ov' : 'un'}">${l.side === 'OVER' ? 'o' : 'u'}${l.threshold}</span></span>
+        <span class="sl-player">${e.player}</span>
+        <span class="sl-line"><span class="${e.lineCls}">${e.line}</span></span>
       </span>
-      <span class="sl-od">${american(l.odds)}</span>
-      <span class="x" data-id="${id}" title="remove">✕</span>
+      <span class="sl-od">${american(e.odds)}</span>
+      <span class="x" data-id="${e.id}" data-kind="${e.kind}" title="remove">✕</span>
     </div>`).join('');
-  $('#slipLegs').querySelectorAll('.x').forEach((x) => (x.onclick = () => { slip.delete(Number(x.dataset.id)); renderBoard(); renderSlip(); }));
+  $('#slipLegs').querySelectorAll('.x').forEach((x) => (x.onclick = () => {
+    const id = Number(x.dataset.id);
+    if (x.dataset.kind === 'm') { mslip.delete(id); document.querySelector(`.pickchip[data-id="${id}"]`)?.classList.remove('sel'); }
+    else { slip.delete(id); document.querySelector(`.rung[data-id="${id}"]`)?.classList.remove('sel'); }
+    renderSlip();
+  }));
   $('#slipOdds').textContent = american(combinedOdds());
   updateToWin();
 }
@@ -221,7 +324,7 @@ function updateToWin() {
   $('#slipToWin').textContent = stake ? money(stake * combinedOdds()) : '—';
 }
 $('#stake').addEventListener('input', updateToWin);
-$('#slipClear').onclick = () => { slip.clear(); renderBoard(); renderSlip(); };
+$('#slipClear').onclick = () => { slip.clear(); mslip.clear(); clearSelections(); renderSlip(); };
 $('.quickstakes').addEventListener('click', (e) => {
   const q = e.target.dataset.q; if (!q) return;
   if (q === 'max') { $('#stake').value = Math.max(0, Math.floor(Number($('#meBal').textContent.replace(/[^0-9.-]/g, '')) || 0)); }
@@ -235,10 +338,10 @@ $('#placeBtn').onclick = async () => {
   if (!stake || stake < 1) { $('#slipErr').textContent = 'enter a stake'; return; }
   const r = await api('/api/bets', {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ username: me, stake, rungIds: [...slip.keys()] }),
+    body: JSON.stringify({ username: me, stake, rungIds: [...slip.keys()], mRungIds: [...mslip.keys()] }),
   });
   if (r.error) { $('#slipErr').textContent = r.error; return; }
-  slip.clear(); $('#stake').value = ''; renderBoard(); renderSlip();
+  slip.clear(); mslip.clear(); $('#stake').value = ''; clearSelections(); renderSlip();
   $('#meBal').textContent = money(r.balance); refreshMe(); loadLeaderboard();
 };
 
@@ -247,6 +350,7 @@ function feedItem(b) {
   const cls = b.status === 'OPEN' ? '' : b.status;
   const legs = b.legs.map((l) => {
     const res = l.actual_value != null ? ` <span class="res">(${l.actual_value})</span>` : '';
+    if (l.leg_kind === 'matchup') return `<span class="mm">${esc(l.player_name)}</span> ${american(l.odds)}${res}`;
     const s = l.side === 'OVER' ? 'ov' : 'un';
     return `${esc(l.player_name)} <span class="${s}">${l.side === 'OVER' ? 'o' : 'u'}${l.threshold}</span> ${american(l.odds)}${res}`;
   }).join('<span class="plus">+</span>');
@@ -292,6 +396,7 @@ async function loadLeaderboard() {
 (async function () {
   if (me) refreshMe();
   await loadMarkets();
+  loadMatchups();
   await loadFeed();
   await loadLeaderboard();
   connectFeed();

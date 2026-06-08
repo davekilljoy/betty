@@ -2,6 +2,7 @@
 // whose legs are all resolved. Pays out via the ledger. Idempotent — safe to re-run.
 const { db, now } = require('./db');
 const { fetchActuals } = require('./sleeper');
+const { fetchMatchups } = require('./league');
 
 const openMarketsForWeek = db.prepare(
   "SELECT * FROM markets WHERE week=? AND status IN ('OPEN','FROZEN','SETTLING')"
@@ -79,16 +80,66 @@ async function settleWeek(week) {
   return { graded, bets: touchedBets.size };
 }
 
-// Freeze trading on any market whose kickoff has passed.
+// --- H2H matchup settlement --------------------------------------------------
+const openMatchupsForWeek = db.prepare(
+  "SELECT * FROM matchups WHERE week=? AND status IN ('OPEN','FROZEN','SETTLING')"
+);
+const setMatchupSettled = db.prepare('UPDATE matchups SET status=?, actual_a=?, actual_b=?, winner=? WHERE id=?');
+const openMatchupLegs = db.prepare("SELECT * FROM bet_legs WHERE matchup_id=? AND leg_kind='matchup' AND status='OPEN'");
+
+async function settleMatchups(week) {
+  const matchups = openMatchupsForWeek.all(week);
+  if (matchups.length === 0) return { graded: 0, bets: 0 };
+
+  let points;
+  try {
+    const rows = await fetchMatchups(week);
+    points = new Map((rows || []).map((r) => [r.roster_id, r.points]));
+  } catch (e) {
+    console.warn(`[settle] matchup points fetch failed for week ${week}: ${e.message}`);
+    return { graded: 0, bets: 0, error: e.message };
+  }
+
+  const touched = new Set();
+  let graded = 0;
+
+  const gradeMatchup = db.transaction((m) => {
+    if (now() < m.settle_after) return;                 // games not final yet
+    const pa = points.get(m.roster_a), pb = points.get(m.roster_b);
+    if (!(pa > 0) && !(pb > 0)) return;                 // not played
+    const winner = pa === pb ? 0 : pa > pb ? m.roster_a : m.roster_b;
+    setMatchupSettled.run('SETTLED', pa, pb, winner, m.id);
+    for (const leg of openMatchupLegs.all(m.id)) {
+      const pick = leg.pick_roster === m.roster_a ? pa : pb;
+      const opp = leg.pick_roster === m.roster_a ? pb : pa;
+      const margin = Math.round((pick - opp) * 10) / 10;
+      setLeg.run(margin > leg.threshold ? 'WON' : 'LOST', margin, leg.id);
+      touched.add(leg.bet_id);
+      graded++;
+    }
+  });
+
+  for (const m of matchups) gradeMatchup(m);
+  for (const betId of touched) finalizeBet(betId);
+
+  console.log(`[settle] week ${week} matchups: graded ${graded} legs across ${touched.size} bets`);
+  return { graded, bets: touched.size };
+}
+
+// Freeze trading on any market/matchup whose kickoff has passed.
 const freezeKickoffs = db.prepare(
   "UPDATE markets SET status='FROZEN' WHERE status='OPEN' AND kickoff_ts <= ?"
 );
+const freezeMatchups = db.prepare(
+  "UPDATE matchups SET status='FROZEN' WHERE status='OPEN' AND kickoff_ts <= ?"
+);
 function freezeDue() {
   const r = freezeKickoffs.run(now());
-  if (r.changes) console.log(`[settle] froze ${r.changes} markets at kickoff`);
-  return r.changes;
+  const rm = freezeMatchups.run(now());
+  if (r.changes || rm.changes) console.log(`[settle] froze ${r.changes} markets, ${rm.changes} matchups`);
+  return r.changes + rm.changes;
 }
 
 function round2(x) { return Math.round(x * 100) / 100; }
 
-module.exports = { settleWeek, finalizeBet, gradeLeg, freezeDue };
+module.exports = { settleWeek, settleMatchups, finalizeBet, gradeLeg, freezeDue };

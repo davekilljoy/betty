@@ -70,19 +70,64 @@ CREATE TABLE IF NOT EXISTS bets (
 CREATE INDEX IF NOT EXISTS idx_bets_feed ON bets(placed_ts DESC);
 CREATE INDEX IF NOT EXISTS idx_bets_user ON bets(username);
 
--- One row per leg. Single bet => 1 leg. Parlay => many. Snapshots are immutable.
+-- Manager-vs-manager (H2H) markets. One row per league matchup per week.
+CREATE TABLE IF NOT EXISTS matchups (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  week         INTEGER NOT NULL,
+  matchup_id   INTEGER NOT NULL,                -- sleeper's pairing id
+  roster_a     INTEGER NOT NULL,
+  roster_b     INTEGER NOT NULL,
+  manager_a    TEXT NOT NULL,
+  manager_b    TEXT NOT NULL,
+  avatar_a     TEXT,
+  avatar_b     TEXT,
+  proj_a       REAL NOT NULL,
+  proj_b       REAL NOT NULL,
+  win_prob_a   REAL NOT NULL,                   -- projected P(A wins)
+  kickoff_ts   INTEGER NOT NULL,
+  settle_after INTEGER NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'OPEN'
+                 CHECK (status IN ('OPEN','FROZEN','SETTLING','SETTLED','VOID')),
+  actual_a     REAL,
+  actual_b     REAL,
+  winner       INTEGER,                          -- roster_id of winner (null until settled)
+  created_ts   INTEGER NOT NULL,
+  UNIQUE (week, matchup_id)
+);
+CREATE INDEX IF NOT EXISTS idx_matchups_week ON matchups(week, status);
+
+-- Bettable lines on a matchup: moneyline + alternate spreads, per side.
+CREATE TABLE IF NOT EXISTS matchup_rungs (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  matchup_id   INTEGER NOT NULL REFERENCES matchups(id) ON DELETE CASCADE,
+  pick_roster  INTEGER NOT NULL,                -- which roster you're backing
+  kind         TEXT NOT NULL CHECK (kind IN ('ml','spread')),
+  spread       REAL NOT NULL,                   -- pick must win by more than this (ml => 0)
+  odds         REAL NOT NULL,
+  implied_prob REAL NOT NULL,
+  UNIQUE (matchup_id, pick_roster, kind, spread)
+);
+CREATE INDEX IF NOT EXISTS idx_mrungs_matchup ON matchup_rungs(matchup_id);
+
+-- One row per leg. Single bet => 1 leg. Parlay => many. A leg is either a player prop
+-- (kind='player', references markets) or a matchup pick (kind='matchup', references
+-- matchups). Snapshots are immutable. NOTE: the live schema is reconciled by migrate()
+-- in db.js for databases created before this was generalized.
 CREATE TABLE IF NOT EXISTS bet_legs (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   bet_id        INTEGER NOT NULL REFERENCES bets(id) ON DELETE CASCADE,
-  market_id     INTEGER NOT NULL REFERENCES markets(id),
-  player_name   TEXT NOT NULL,                  -- denormalized for the feed
-  side          TEXT NOT NULL CHECK (side IN ('OVER','UNDER')),
-  threshold     REAL NOT NULL,
+  leg_kind      TEXT NOT NULL DEFAULT 'player' CHECK (leg_kind IN ('player','matchup')),
+  market_id     INTEGER,                        -- player legs
+  matchup_id    INTEGER,                        -- matchup legs
+  pick_roster   INTEGER,                        -- matchup legs: backed roster
+  player_name   TEXT NOT NULL,                  -- label for the feed (player or manager)
+  side          TEXT,                           -- player: OVER/UNDER; matchup: ML or spread text
+  threshold     REAL,                           -- player: line; matchup: spread
   odds          REAL NOT NULL,                  -- snapshot at placement
-  line          REAL NOT NULL,                  -- projection snapshot at placement
+  line          REAL,                           -- player: projection; matchup: projected margin
   status        TEXT NOT NULL DEFAULT 'OPEN'
                   CHECK (status IN ('OPEN','WON','LOST','VOID')),
   actual_value  REAL
 );
-CREATE INDEX IF NOT EXISTS idx_legs_bet ON bet_legs(bet_id);
-CREATE INDEX IF NOT EXISTS idx_legs_market ON bet_legs(market_id);
+-- bet_legs indexes are created in db.js AFTER migrate(), since on an old database the
+-- matchup_id/etc columns don't exist until the table is rebuilt.

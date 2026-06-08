@@ -136,5 +136,43 @@ function invNorm(p) {
 function round3(x) {
   return Math.round(x * 1000) / 1000;
 }
+const toHalf = (x) => Math.round(x * 2) / 2;
 
-module.exports = { buildLadder, priceFromProb, toAmerican, HOUSE_EDGE, POSITION_CV };
+// --- H2H matchups -----------------------------------------------------------
+// Weekly team-score margin (A - B) is ~normal; its SD across a game is sizable, so a
+// modest projected edge is far from a lock. Tunable.
+const MATCHUP_SIGMA = 28;
+
+// P(A wins) from projected team totals.
+function marginWinProb(projA, projB) {
+  return round3(normCdf((projA - projB) / MATCHUP_SIGMA));
+}
+
+// Lines for one matchup: a moneyline + alternate spreads for each side. Each rung carries
+// the true cover-probability from its (rounded) spread so the price is honest. `side` is
+// 'A' or 'B'; the ingest maps that to a roster id.
+function buildMatchupRungs(projA, projB) {
+  const M = projA - projB;                 // A's projected margin
+  const rungs = [];
+  const add = (side, kind, margin, spread) => {
+    const p = normCdf((margin - spread) / MATCHUP_SIGMA);
+    rungs.push({ side, kind, spread, odds: priceFromProb(p), prob: round3(p) });
+  };
+  // moneyline (win outright = cover spread 0)
+  add('A', 'ml', M, 0);
+  add('B', 'ml', -M, 0);
+  // alternate spreads: safer (shorter) -> longshot (longer), skipping ~pickem dups
+  for (const [side, margin] of [['A', M], ['B', -M]]) {
+    for (const p of [0.64, 0.40, 0.25]) {
+      const spread = toHalf(margin - MATCHUP_SIGMA * invNorm(p));
+      if (Math.abs(spread) < 0.5) continue;  // that's basically the moneyline
+      add(side, 'spread', margin, spread);
+    }
+  }
+  return rungs;
+}
+
+module.exports = {
+  buildLadder, priceFromProb, toAmerican, HOUSE_EDGE, POSITION_CV,
+  marginWinProb, buildMatchupRungs, MATCHUP_SIGMA,
+};

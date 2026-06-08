@@ -23,4 +23,15 @@ async function fetchLeague() {
   return sleeperJson(`https://api.sleeper.com/v1/league/${LEAGUE_ID}`);
 }
 
-module.exports = { LEAGUE_ID, fetchMembers, fetchLeague };
+// [{ roster_id, owner_id, starters: [player_id], ... }]
+async function fetchRosters() {
+  return sleeperJson(`https://api.sleeper.com/v1/league/${LEAGUE_ID}/rosters`);
+}
+
+// [{ roster_id, matchup_id, points, starters, ... }] for a given week. Two rosters that
+// share a matchup_id are playing each other.
+async function fetchMatchups(week) {
+  return sleeperJson(`https://api.sleeper.com/v1/league/${LEAGUE_ID}/matchups/${week}`);
+}
+
+module.exports = { LEAGUE_ID, fetchMembers, fetchLeague, fetchRosters, fetchMatchups };

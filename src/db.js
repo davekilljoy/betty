@@ -9,6 +9,40 @@ fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 const db = new Database(DB_PATH);
 db.exec(fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8'));
 
+// Reconcile databases created before bet_legs was generalized (player|matchup legs).
+// CREATE TABLE IF NOT EXISTS won't alter an existing table, so rebuild it in place.
+(function migrate() {
+  const cols = db.prepare('PRAGMA table_info(bet_legs)').all().map((c) => c.name);
+  if (!cols.includes('leg_kind')) {
+    db.exec(`
+      ALTER TABLE bet_legs RENAME TO bet_legs_old;
+      CREATE TABLE bet_legs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        bet_id INTEGER NOT NULL REFERENCES bets(id) ON DELETE CASCADE,
+        leg_kind TEXT NOT NULL DEFAULT 'player' CHECK (leg_kind IN ('player','matchup')),
+        market_id INTEGER, matchup_id INTEGER, pick_roster INTEGER,
+        player_name TEXT NOT NULL, side TEXT, threshold REAL, odds REAL NOT NULL, line REAL,
+        status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','WON','LOST','VOID')),
+        actual_value REAL
+      );
+      INSERT INTO bet_legs (id,bet_id,leg_kind,market_id,player_name,side,threshold,odds,line,status,actual_value)
+        SELECT id,bet_id,'player',market_id,player_name,side,threshold,odds,line,status,actual_value FROM bet_legs_old;
+      DROP TABLE bet_legs_old;
+      CREATE INDEX IF NOT EXISTS idx_legs_bet ON bet_legs(bet_id);
+      CREATE INDEX IF NOT EXISTS idx_legs_market ON bet_legs(market_id);
+      CREATE INDEX IF NOT EXISTS idx_legs_matchup ON bet_legs(matchup_id);
+    `);
+    console.log('[db] migrated bet_legs to generalized (player|matchup) schema');
+  }
+})();
+
+// bet_legs indexes, created after migrate() so the columns are guaranteed to exist.
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_legs_bet ON bet_legs(bet_id);
+  CREATE INDEX IF NOT EXISTS idx_legs_market ON bet_legs(market_id);
+  CREATE INDEX IF NOT EXISTS idx_legs_matchup ON bet_legs(matchup_id);
+`);
+
 const WEEKLY_GRANT = Number(process.env.BETTY_GRANT || 1000);
 
 // The active betting period. 0 = preseason/offseason lump; 1..18 = regular-season weeks.

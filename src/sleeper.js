@@ -53,6 +53,16 @@ async function fetchSchedule(week) {
   return map;
 }
 
+// Projected PPR for EVERY player this week, keyed by player_id. Used to sum roster
+// starters into team totals for H2H matchup odds (includes K/DEF, no position filter).
+async function fetchProjectionMap(week) {
+  const url = `https://api.sleeper.com/projections/nfl/${SEASON}/${week}?season_type=regular&order_by=ppr`;
+  const rows = await sleeperJson(url);
+  const map = new Map();
+  for (const r of rows || []) map.set(String(r.player_id), pprFromStats(r.stats || {}));
+  return map;
+}
+
 // Actual scored stats for a week, keyed by player_id -> ppr points (or null if DNP).
 async function fetchActuals(week) {
   const url = `https://api.sleeper.com/stats/nfl/${SEASON}/${week}?season_type=regular`;
@@ -140,4 +150,4 @@ async function ingest({ week = currentPeriod(), kickoff_ts } = {}) {
   return n;
 }
 
-module.exports = { ingest, fetchProjections, fetchActuals, pprFromStats, SEASON };
+module.exports = { ingest, fetchProjections, fetchActuals, fetchProjectionMap, fetchSchedule, pprFromStats, SEASON };

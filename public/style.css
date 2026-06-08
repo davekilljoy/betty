@@ -105,7 +105,7 @@ main { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.9
   padding: 5px 11px; font-size: 12px; font-weight: 700; color: var(--dim);
   transition: border-color .14s, color .14s, background .14s;
 }
-.game:hover { border-color: var(--line); color: var(--txt); }
+@media (hover: hover) { .game:hover { border-color: var(--line); color: var(--txt); } }
 .game.sel { border-color: var(--gold); color: var(--txt); background: var(--gold-soft); }
 .game .gl { width: 20px; height: 20px; object-fit: contain; flex: none; }
 .game .at { color: var(--faint); font-weight: 600; }
@@ -127,7 +127,7 @@ main { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.9
   background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r); padding: 12px 14px;
   transition: border-color .15s, background .15s;
 }
-.market:hover { border-color: var(--line); background: var(--surface-2); }
+@media (hover: hover) { .market:hover { border-color: var(--line); background: var(--surface-2); } }
 .player { display: flex; align-items: center; gap: 11px; min-width: 184px; }
 .avatar {
   position: relative; width: 46px; height: 46px; border-radius: 50%; flex: none; overflow: hidden;
@@ -166,7 +166,7 @@ main { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.9
   background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: var(--r-sm);
   padding: 6px 9px; min-width: 56px; cursor: pointer; transition: border-color .14s, background .14s, transform .1s var(--ease);
 }
-.rung:hover { border-color: var(--gold); }
+@media (hover: hover) { .rung:hover { border-color: var(--gold); } }
 .rung:active { transform: translateY(1px); }
 .rung.sel { border-color: var(--gold); background: var(--gold-soft); box-shadow: inset 0 0 0 1px var(--gold); }
 .rung.over.sel { background: oklch(0.75 0.13 235 / 0.16); }
@@ -246,6 +246,37 @@ main { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.9
 .btn.place { width: 100%; padding: 11px; font-size: 14.5px; }
 .err { color: var(--loss); font-size: 12px; margin-top: 8px; min-height: 14px; text-align: center; }
 
+/* ---------- mode switch (players | managers) ---------- */
+.mode-switch { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-sm); padding: 4px; margin-bottom: 14px; }
+.mode { flex: 1; background: none; border: 0; color: var(--dim); padding: 10px 0; border-radius: 8px; font-weight: 700; font-size: 14px; cursor: pointer; transition: color .15s, background .15s; }
+@media (hover: hover) { .mode:hover { color: var(--txt); } }
+.mode.active { background: var(--surface-2); color: var(--gold); box-shadow: inset 0 0 0 1px var(--line); }
+
+/* ---------- matchup (H2H) cards ---------- */
+.matchup-list { display: flex; flex-direction: column; gap: 10px; }
+.matchup { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r); padding: 4px 2px; }
+.mteam { display: flex; align-items: center; gap: 12px; padding: 10px 13px; }
+.minfo { display: flex; align-items: center; gap: 11px; flex: 0 0 auto; min-width: 156px; }
+.mav { position: relative; width: 40px; height: 40px; border-radius: 50%; flex: none; overflow: hidden; display: grid; place-items: center; font-weight: 800; font-size: 13px; color: var(--txt); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
+.mav .face { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.mname-wrap { display: flex; flex-direction: column; min-width: 0; }
+.mname { font-weight: 700; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mproj { display: flex; align-items: center; gap: 7px; color: var(--faint); font-size: 12px; margin-top: 2px; }
+.mpct { font-weight: 800; color: var(--dim); }
+.mpct.fav { color: var(--gold); }
+.mchips { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+.pickchip { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: var(--r-sm); padding: 6px 11px; min-width: 60px; cursor: pointer; transition: border-color .14s, background .14s, transform .1s var(--ease); }
+.pickchip:active { transform: translateY(1px); }
+@media (hover: hover) { .pickchip:hover { border-color: var(--gold); } }
+.pickchip.sel { border-color: var(--gold); background: var(--gold-soft); box-shadow: inset 0 0 0 1px var(--gold); }
+.pickchip .pl { font-size: 11px; font-weight: 700; color: var(--dim); letter-spacing: .02em; }
+.pickchip.ml .pl { color: var(--gold); }
+.pickchip .po { font-size: 13px; font-weight: 700; }
+.mdivider { position: relative; text-align: center; margin: 1px 14px; }
+.mdivider::before { content: ''; position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: var(--line-soft); }
+.mdivider span { position: relative; background: var(--surface); padding: 0 9px; color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .14em; }
+.mm { color: var(--gold); font-weight: 700; }
+
 /* ---------- responsive ---------- */
 @media (max-width: 940px) {
   main { grid-template-columns: minmax(0, 1fr); padding: 14px 14px 130px; }
@@ -279,6 +310,12 @@ main { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.9
   .control-search { flex: 1 1 100%; }
   .select { flex: 1; font-size: 0; gap: 0; }
   .select select { font-size: 13px; width: 100%; }
+
+  /* matchups: stack manager info above its chips; chips fill the row, always visible */
+  .mteam { flex-direction: column; align-items: stretch; gap: 9px; }
+  .minfo { min-width: 0; }
+  .mchips { margin-left: 0; justify-content: flex-start; }
+  .pickchip { flex: 1 1 0; min-width: 62px; }
 }
 @media (max-width: 540px) {
   .topbar { flex-wrap: wrap; gap: 8px 12px; padding: 11px 14px; }

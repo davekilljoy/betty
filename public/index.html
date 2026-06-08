@@ -28,11 +28,17 @@
 
   <main>
     <section class="board">
+      <div class="mode-switch" id="modeSwitch" role="tablist" aria-label="board mode">
+        <button class="mode active" data-mode="players" role="tab">Players</button>
+        <button class="mode" data-mode="managers" role="tab">Managers</button>
+      </div>
+
       <div class="board-head">
-        <h2>The Board <span id="weekTag" class="tag"></span></h2>
+        <h2 id="boardTitle">The Board <span id="weekTag" class="tag"></span></h2>
         <span id="marketCount" class="count"></span>
       </div>
 
+      <div id="playersView">
       <div class="controls">
         <div class="segmented" id="posFilter" role="tablist" aria-label="position">
           <button class="seg active" data-pos="ALL">All</button>
@@ -60,6 +66,11 @@
 
       <div id="gamesStrip" class="games-strip"></div>
       <div id="markets" class="market-list"></div>
+      </div><!-- /playersView -->
+
+      <div id="managersView" class="hidden">
+        <div id="matchups" class="matchup-list"></div>
+      </div>
     </section>
 
     <aside class="rail">
