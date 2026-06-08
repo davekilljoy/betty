@@ -168,10 +168,31 @@ function startBackground() {
   setInterval(tick, Number(process.env.BETTY_TICK_MS || 60_000));
 }
 
+// First-boot seeding: on a fresh volume the board is empty, so ingest the display week
+// and load the real league members. Idempotent — skips ingest if markets already exist.
+async function bootstrap() {
+  if (process.env.BETTY_AUTOSEED === '0') return;
+  try {
+    const wk = displayWeek();
+    const have = db.prepare("SELECT COUNT(*) AS c FROM markets WHERE week=? AND status='OPEN'").get(wk).c;
+    if (have === 0) {
+      console.log(`[boot] empty board — ingesting week ${wk}`);
+      await ingest({ week: wk });
+    }
+    const { fetchMembers } = require('./league');
+    const members = await fetchMembers();
+    for (const m of members) login(m.username);
+    console.log(`[boot] ${members.length} league members loaded`);
+  } catch (e) {
+    console.warn('[boot] bootstrap skipped:', e.message);
+  }
+}
+
 async function start() {
   const port = Number(process.env.PORT || 3000);
   await app.listen({ port, host: '0.0.0.0' });
   console.log(`betty up on :${port}  (league ${LEAGUE_ID}, period ${currentPeriod()})`);
+  await bootstrap();
   startBackground();
 }
 
