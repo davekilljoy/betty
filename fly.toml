@@ -1,31 +1,32 @@
-# Fly config. `fly launch --no-deploy` then `fly volumes create betty_data --size 1`,
-# then `fly deploy`. The volume keeps the SQLite file across restarts.
-app = "betty-r5jqpq"
-primary_region = "iad"
+# fly.toml app configuration file generated for betty-app on 2026-06-08T23:02:14Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'betty-app'
+primary_region = 'ams'
 
 [build]
-  dockerfile = "Dockerfile"
+  dockerfile = 'Dockerfile'
 
 [env]
-  PORT = "3000"
-  BETTY_DB = "/data/betty.db"
-  BETTY_LEAGUE_ID = "1312071038443454464"
-  BETTY_SEASON = "2026"
-  BETTY_MARKET_WEEK = "1"     # board shows week 1
-  # BETTY_WEEK unset => preseason (period 0, one-time $1k lump).
-  # On boot the server self-seeds an empty board (ingest + league members).
+  BETTY_DB = '/data/betty.db'
+  BETTY_LEAGUE_ID = '1312071038443454464'
+  BETTY_MARKET_WEEK = '1'
+  BETTY_SEASON = '2026'
+  PORT = '3000'
 
-[mounts]
-  source = "betty_data"
-  destination = "/data"
+[[mounts]]
+  source = 'betty_data'
+  destination = '/data'
 
 [http_service]
-  internal_port = 3000
+  internal_port = 8080
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 1   # keep 1 up so the settle/freeze loop runs
+  min_machines_running = 1
 
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "256mb"
+  size = 'shared-cpu-1x'
+  memory = '256mb'
