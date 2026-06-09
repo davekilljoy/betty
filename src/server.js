@@ -229,6 +229,26 @@ app.get('/api/bets', async (req) => {
   });
 });
 
+// a single user's full bet history (for the My Bets tab) + a P&L summary
+const myBetsQ = db.prepare('SELECT * FROM bets WHERE username=? ORDER BY placed_ts DESC LIMIT ?');
+app.get('/api/mybets', async (req) => {
+  const me = String(req.query.username || '').trim().toLowerCase();
+  if (!me) return { bets: [], summary: null };
+  const limit = Math.min(Number(req.query.limit || 100), 300);
+  const bets = myBetsQ.all(me, limit).map((b) => {
+    const legs = feedLegs.all(b.id);
+    const cashout = b.status === 'OPEN' ? cashoutQuote(b, legs).value : undefined;
+    return { ...b, legs, cashout };
+  });
+  const summary = {
+    open: bets.filter((b) => b.status === 'OPEN').length,
+    atRisk: bets.filter((b) => b.status === 'OPEN').reduce((s, b) => s + b.stake, 0),
+    pnl: seasonPnl(me),
+    balance: spendableBalance(me),
+  };
+  return { bets, summary };
+});
+
 // --- leaderboard (season P&L) ------------------------------------------------
 app.get('/api/leaderboard', async () => {
   const rows = db

@@ -30,7 +30,7 @@ async function doLogin(name) {
   });
   if (r.error) { $('#username').focus(); return alert(r.error); }
   me = r.username; localStorage.setItem('betty_user', me);
-  renderWallet(r); loadLeaderboard();
+  renderWallet(r); loadLeaderboard(); loadFeed(); loadMyBets();
 }
 function renderWallet(m) {
   $('#who').classList.add('hidden');
@@ -51,7 +51,7 @@ $('#username').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#l
 $('#logoutBtn').onclick = () => {
   me = null; localStorage.removeItem('betty_user');
   $('#wallet').classList.add('hidden'); $('#who').classList.remove('hidden');
-  $('#username').value = ''; loadLeaderboard();
+  $('#username').value = ''; loadLeaderboard(); loadFeed(); loadMyBets();
 };
 
 // --- board ---
@@ -217,7 +217,8 @@ $('#teamFilter').onchange = (e) => { filters.team = e.target.value; renderBoard(
 $('#sortBy').onchange = (e) => { filters.sort = e.target.value; renderBoard(); };
 $('#search').oninput = (e) => { filters.search = e.target.value.trim().toLowerCase(); renderBoard(); };
 
-// --- mode switch: players <-> managers ---
+// --- mode switch: players | managers | my bets ---
+const MODE_TITLE = { players: 'The Board ', managers: 'Matchups ', mybets: 'My Bets ' };
 $('#modeSwitch').querySelectorAll('.mode').forEach((b) => (b.onclick = () => {
   if (mode === b.dataset.mode) return;
   $('#modeSwitch .mode.active')?.classList.remove('active');
@@ -225,10 +226,35 @@ $('#modeSwitch').querySelectorAll('.mode').forEach((b) => (b.onclick = () => {
   mode = b.dataset.mode;
   $('#playersView').classList.toggle('hidden', mode !== 'players');
   $('#managersView').classList.toggle('hidden', mode !== 'managers');
-  $('#boardTitle').firstChild.textContent = mode === 'players' ? 'The Board ' : 'Matchups ';
+  $('#mybetsView').classList.toggle('hidden', mode !== 'mybets');
+  $('#boardTitle').firstChild.textContent = MODE_TITLE[mode];
   $('#weekTag').classList.toggle('hidden', mode !== 'players');
-  if (mode === 'managers') renderMatchups(); else renderBoard();
+  if (mode === 'managers') renderMatchups();
+  else if (mode === 'mybets') loadMyBets();
+  else renderBoard();
 }));
+
+// --- My Bets ---
+async function loadMyBets() {
+  if (mode !== 'mybets') return;
+  if (!me) {
+    $('#mybetsSummary').innerHTML = '';
+    $('#marketCount').textContent = '';
+    $('#mybets').innerHTML = '<div class="board-empty">Enter your username to see your bets.</div>';
+    return;
+  }
+  const { bets, summary } = await api(`/api/mybets?username=${encodeURIComponent(me)}`);
+  $('#marketCount').textContent = `${bets.length} bet${bets.length === 1 ? '' : 's'}`;
+  $('#mybetsSummary').innerHTML = summary ? `
+    <div class="ms"><label>open</label><b>${summary.open}</b></div>
+    <div class="ms"><label>at risk</label><b class="gold">${money(summary.atRisk)}</b></div>
+    <div class="ms"><label>season p&amp;l</label><b class="${summary.pnl >= 0 ? 'win' : 'loss'}">${signed(summary.pnl)}</b></div>` : '';
+  $('#mybets').innerHTML = bets.length ? bets.map(feedItem).join('') : '<div class="board-empty">No bets yet. Go make some.</div>';
+}
+$('#mybets').addEventListener('click', (e) => {
+  const btn = e.target.closest('.cashbtn');
+  if (btn) cashOut(Number(btn.dataset.id));
+});
 
 // --- matchups (H2H) board ---
 async function loadMatchups() {
@@ -342,7 +368,7 @@ $('#placeBtn').onclick = async () => {
   });
   if (r.error) { $('#slipErr').textContent = r.error; return; }
   slip.clear(); mslip.clear(); $('#stake').value = ''; clearSelections(); renderSlip();
-  $('#meBal').textContent = money(r.balance); refreshMe(); loadFeed(); loadLeaderboard();
+  $('#meBal').textContent = money(r.balance); refreshMe(); loadFeed(); loadLeaderboard(); loadMyBets();
 };
 
 // --- feed ---
@@ -382,7 +408,7 @@ async function cashOut(id) {
   });
   if (r.error) return alert(r.error);
   $('#meBal').textContent = money(r.balance);
-  refreshMe(); loadFeed(); loadLeaderboard();
+  refreshMe(); loadFeed(); loadLeaderboard(); loadMyBets();
 }
 $('#feed').addEventListener('click', (e) => {
   const btn = e.target.closest('.cashbtn');
@@ -394,7 +420,7 @@ function connectFeed() {
     const empty = $('#feed .empty'); if (empty) empty.remove();
     $('#feed').insertAdjacentHTML('afterbegin', feedItem(JSON.parse(e.data)));
   });
-  es.addEventListener('tick', () => { loadFeed(); loadLeaderboard(); refreshMe(); });
+  es.addEventListener('tick', () => { loadFeed(); loadLeaderboard(); refreshMe(); loadMyBets(); });
 }
 
 // --- leaderboard ---
