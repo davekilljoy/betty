@@ -6,6 +6,7 @@ const { db, now, currentPeriod, login, spendableBalance, seasonPnl } = require('
 const { ingest } = require('./sleeper');
 const { ingestMatchups } = require('./matchups');
 const { settleWeek, settleMatchups, freezeDue } = require('./settle');
+const { legWinProb, coverProb } = require('./odds');
 const { LEAGUE_ID } = require('./league');
 
 const app = Fastify({ logger: false });
@@ -137,6 +138,65 @@ const placeBet = db.transaction((username, stake, rungIds, mRungIds) => {
 const feedBet = db.prepare('SELECT * FROM bets WHERE id=?');
 const feedLegs = db.prepare('SELECT leg_kind, market_id, matchup_id, pick_roster, player_name, side, threshold, odds, line, status, actual_value FROM bet_legs WHERE bet_id=?');
 
+// --- cash out (early exit at current value minus a penalty) -------------------
+const CASHOUT_PENALTY = Number(process.env.BETTY_CASHOUT_PENALTY || 0.10);
+const marketLite = db.prepare('SELECT projection, position, status FROM markets WHERE id=?');
+const matchupLite = db.prepare('SELECT proj_a, proj_b, roster_a, status FROM matchups WHERE id=?');
+
+// Re-price an open bet against the CURRENT lines. Returns {available, value, winProb}.
+// Unavailable once any leg's market/matchup has frozen (no live re-pricing mid-game).
+function cashoutQuote(bet, legs) {
+  if (bet.status !== 'OPEN') return { available: false, value: null };
+  let prob = 1;
+  for (const l of legs) {
+    if (l.leg_kind === 'player') {
+      const m = marketLite.get(l.market_id);
+      if (!m || m.status !== 'OPEN') return { available: false, value: null };
+      prob *= legWinProb(m.projection, m.position, l.side, l.threshold);
+    } else {
+      const mu = matchupLite.get(l.matchup_id);
+      if (!mu || mu.status !== 'OPEN') return { available: false, value: null };
+      const pickProj = l.pick_roster === mu.roster_a ? mu.proj_a : mu.proj_b;
+      const oppProj = l.pick_roster === mu.roster_a ? mu.proj_b : mu.proj_a;
+      prob *= coverProb(pickProj, oppProj, l.threshold);
+    }
+  }
+  const value = Math.max(0, Math.floor(bet.potential * prob * (1 - CASHOUT_PENALTY)));
+  return { available: true, value, winProb: Math.round(prob * 1000) / 1000 };
+}
+
+const setCashed = db.prepare("UPDATE bets SET status='CASHED', payout=?, settled_ts=? WHERE id=? AND status='OPEN'");
+const voidLegsForBet = db.prepare("UPDATE bet_legs SET status='VOID' WHERE bet_id=?");
+const addPayout = db.prepare("INSERT INTO ledger (username, week, delta, reason, bet_id, ts) VALUES (?,?,?,'payout',?,?)");
+
+const cashOut = db.transaction((betId, username) => {
+  const bet = feedBet.get(betId);
+  if (!bet) throw new Error('no such bet');
+  if (bet.username !== username) throw new Error('not your bet');
+  if (bet.status !== 'OPEN') throw new Error('bet is already settled');
+  const legs = feedLegs.all(betId);
+  const q = cashoutQuote(bet, legs);
+  if (!q.available) throw new Error('cash out unavailable (a line is locked)');
+  const r = setCashed.run(q.value, now(), betId);
+  if (r.changes === 0) throw new Error('bet is already settled');
+  voidLegsForBet.run(betId);                       // legs settled early; skip grading
+  addPayout.run(username, bet.week, q.value, betId, now());
+  return q.value;
+});
+
+app.post('/api/bets/:id/cashout', async (req, reply) => {
+  const username = String(req.body?.username || '').trim().toLowerCase();
+  if (!username) return reply.code(400).send({ error: 'login first' });
+  try {
+    const value = cashOut(Number(req.params.id), username);
+    const bet = { ...feedBet.get(Number(req.params.id)), legs: feedLegs.all(Number(req.params.id)) };
+    broadcast('bet', bet);
+    return { ok: true, value, balance: spendableBalance(username) };
+  } catch (e) {
+    return reply.code(400).send({ error: e.message });
+  }
+});
+
 app.post('/api/bets', async (req, reply) => {
   const username = String(req.body?.username || '').trim().toLowerCase();
   if (!username) return reply.code(400).send({ error: 'login first' });
@@ -159,7 +219,14 @@ app.post('/api/bets', async (req, reply) => {
 const recentBets = db.prepare('SELECT * FROM bets ORDER BY placed_ts DESC LIMIT ?');
 app.get('/api/bets', async (req) => {
   const limit = Math.min(Number(req.query.limit || 50), 200);
-  return recentBets.all(limit).map((b) => ({ ...b, legs: feedLegs.all(b.id) }));
+  const me = String(req.query.username || '').trim().toLowerCase();
+  return recentBets.all(limit).map((b) => {
+    const legs = feedLegs.all(b.id);
+    // expose a live cash-out value only on the requester's own open bets
+    const cashout = me && b.username === me && b.status === 'OPEN'
+      ? cashoutQuote(b, legs).value : undefined;
+    return { ...b, legs, cashout };
+  });
 });
 
 // --- leaderboard (season P&L) ------------------------------------------------
@@ -191,23 +258,57 @@ app.post('/api/admin/settle', async (req) => {
   return { players: await settleWeek(week), matchups: await settleMatchups(week) };
 });
 
-// --- background loop: freeze + settle on an interval -------------------------
+// --- adaptive polling: cadence scales with how close we are to live games -----
+// Phase comes from the displayed week's kickoff/settle windows (no extra fetch):
+//   live     = a game window is in progress  -> poll fast (freeze + settle)
+//   gameweek = games are within ~4 days      -> refresh lines, freeze at kickoff
+//   offseason= nothing close                 -> slow line refresh only
+const minKick = db.prepare("SELECT MIN(kickoff_ts) AS mn, MAX(settle_after) AS mx FROM markets WHERE week=? AND status IN ('OPEN','FROZEN')");
+function computePhase() {
+  const row = minKick.get(displayWeek());
+  if (!row || !row.mn) return 'offseason';
+  const t = now();
+  if (t >= row.mn && t <= row.mx) return 'live';
+  if (row.mn - t <= 4 * 24 * 3600 * 1000) return 'gameweek';
+  return 'offseason';
+}
+const PHASE = {
+  offseason: { tick: 6 * 3600e3, ingest: 12 * 3600e3, settle: false },
+  gameweek:  { tick: 20 * 60e3,  ingest: 20 * 60e3,   settle: false },
+  live:      { tick: 60e3,       ingest: 15 * 60e3,   settle: true },
+};
+
 function startBackground() {
-  if (process.env.BETTY_AUTOSETTLE === '0') {
-    console.log('[bg] auto-settle disabled (demo/historical mode) — markets stay open');
-    return;
-  }
-  const tick = async () => {
+  const noPoll = process.env.BETTY_AUTOPOLL === '0';
+  const noSettle = process.env.BETTY_AUTOSETTLE === '0';
+  if (noPoll && noSettle) { console.log('[bg] background polling disabled'); return; }
+  let lastIngest = 0;
+  const run = async () => {
+    let delay = PHASE.offseason.tick;
     try {
+      const phase = computePhase();
+      const cfg = PHASE[phase];
+      delay = Number(process.env.BETTY_TICK_MS) || cfg.tick;
       freezeDue();
-      await settleWeek(currentPeriod());
-      await settleMatchups(currentPeriod());
-      broadcast('tick', { period: currentPeriod(), ts: now() });
+      if (!noPoll && now() - lastIngest >= cfg.ingest) {
+        const wk = displayWeek();
+        await ingest({ week: wk });
+        await ingestMatchups({ week: wk });
+        lastIngest = now();
+      }
+      if (cfg.settle && !noSettle) {
+        await settleWeek(currentPeriod());
+        await settleMatchups(currentPeriod());
+      }
+      broadcast('tick', { phase, ts: now() });
     } catch (e) {
       console.warn('[bg] tick error:', e.message);
+    } finally {
+      setTimeout(run, delay);
     }
   };
-  setInterval(tick, Number(process.env.BETTY_TICK_MS || 60_000));
+  console.log('[bg] adaptive polling started');
+  setTimeout(run, 1000);
 }
 
 // First-boot seeding: on a fresh volume the board is empty, so ingest the display week

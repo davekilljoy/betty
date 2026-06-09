@@ -342,7 +342,7 @@ $('#placeBtn').onclick = async () => {
   });
   if (r.error) { $('#slipErr').textContent = r.error; return; }
   slip.clear(); mslip.clear(); $('#stake').value = ''; clearSelections(); renderSlip();
-  $('#meBal').textContent = money(r.balance); refreshMe(); loadLeaderboard();
+  $('#meBal').textContent = money(r.balance); refreshMe(); loadFeed(); loadLeaderboard();
 };
 
 // --- feed ---
@@ -358,19 +358,36 @@ function feedItem(b) {
   if (b.status === 'WON') amt = `<span class="amt win">${signed(b.payout)}</span>`;
   else if (b.status === 'LOST') amt = `<span class="amt lose">${signed(-b.stake)}</span>`;
   else if (b.status === 'VOID') amt = `<span class="amt void">refunded</span>`;
+  else if (b.status === 'CASHED') amt = `<span class="amt cashed">cashed ${signed(b.payout - b.stake)}</span>`;
   const pill = b.type === 'parlay' ? `<span class="pill parlay">${b.legs.length}-leg</span>` : '';
+  const cash = (b.username === me && b.status === 'OPEN' && b.cashout != null)
+    ? `<button class="cashbtn" data-id="${b.id}">cash out <b>${money(b.cashout)}</b></button>` : '';
   return `<div class="item ${cls}">
     <div class="row1">
       <span class="fav">${esc(initials(b.username))}</span>
       <span class="u">${esc(b.username)}</span>${pill}${amt}
     </div>
-    <div class="legline">${legs}</div>
+    <div class="legline">${legs}</div>${cash}
   </div>`;
 }
 async function loadFeed() {
-  const bets = await api('/api/bets?limit=50');
+  const bets = await api(`/api/bets?limit=50&username=${encodeURIComponent(me || '')}`);
   $('#feed').innerHTML = bets.length ? bets.map(feedItem).join('') : '<div class="empty">No bets yet. Be the first degenerate.</div>';
 }
+async function cashOut(id) {
+  if (!me) return;
+  const r = await api(`/api/bets/${id}/cashout`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username: me }),
+  });
+  if (r.error) return alert(r.error);
+  $('#meBal').textContent = money(r.balance);
+  refreshMe(); loadFeed(); loadLeaderboard();
+}
+$('#feed').addEventListener('click', (e) => {
+  const btn = e.target.closest('.cashbtn');
+  if (btn) cashOut(Number(btn.dataset.id));
+});
 function connectFeed() {
   const es = new EventSource('/api/feed');
   es.addEventListener('bet', (e) => {

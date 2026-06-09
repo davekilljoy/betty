@@ -51,12 +51,16 @@ async function ingestMatchups({ week } = {}) {
     groups.get(s.matchup_id).push(s.roster_id);
   }
 
+  const existingMatchup = db.prepare('SELECT id, status, proj_a, proj_b FROM matchups WHERE week=? AND matchup_id=?');
   const run = db.transaction(() => {
     let n = 0;
     for (const [mid, rids] of groups) {
       if (rids.length !== 2) continue;
+      const ex = existingMatchup.get(week, mid);
+      if (ex && ex.status !== 'OPEN') continue;              // don't re-price frozen/settled
       const [a, b] = rids;
       const projA = teamProj(a), projB = teamProj(b);
+      if (ex && ex.proj_a === projA && ex.proj_b === projB) continue; // unchanged, no churn
       const ma = mgr(a), mb = mgr(b);
       const row = upsertMatchup.get({
         week, matchup_id: mid, roster_a: a, roster_b: b,

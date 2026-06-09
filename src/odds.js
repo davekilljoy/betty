@@ -148,6 +148,19 @@ function marginWinProb(projA, projB) {
   return round3(normCdf((projA - projB) / MATCHUP_SIGMA));
 }
 
+// Current win-probability of an open leg, for cash-out re-pricing.
+function legWinProb(projection, position, side, threshold) {
+  const cv = POSITION_CV[position] ?? DEFAULT_CV;
+  const { m, sigma } = lognormalParams(projection, cv);
+  const pOver = probOver(threshold, m, sigma);
+  return round3(side === 'OVER' ? pOver : 1 - pOver);
+}
+
+// P(the picked roster covers `spread`) given current projected totals.
+function coverProb(projPick, projOpp, spread) {
+  return round3(normCdf((projPick - projOpp - spread) / MATCHUP_SIGMA));
+}
+
 // Lines for one matchup: a moneyline + alternate spreads for each side. Each rung carries
 // the true cover-probability from its (rounded) spread so the price is honest. `side` is
 // 'A' or 'B'; the ingest maps that to a roster id.
@@ -174,5 +187,5 @@ function buildMatchupRungs(projA, projB) {
 
 module.exports = {
   buildLadder, priceFromProb, toAmerican, HOUSE_EDGE, POSITION_CV,
-  marginWinProb, buildMatchupRungs, MATCHUP_SIGMA,
+  marginWinProb, buildMatchupRungs, MATCHUP_SIGMA, legWinProb, coverProb,
 };

@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS bets (
   combined_odds REAL NOT NULL,
   potential     INTEGER NOT NULL,               -- stake * combined_odds, floored
   status        TEXT NOT NULL DEFAULT 'OPEN'
-                  CHECK (status IN ('OPEN','WON','LOST','VOID')),
+                  CHECK (status IN ('OPEN','WON','LOST','VOID','CASHED')),
   payout        INTEGER NOT NULL DEFAULT 0,
   placed_ts     INTEGER NOT NULL,
   settled_ts    INTEGER

@@ -99,9 +99,15 @@ const clearRungs = db.prepare('DELETE FROM rungs WHERE market_id=?');
 const insRung = db.prepare(`INSERT OR IGNORE INTO rungs (market_id, side, threshold, odds, implied_prob)
   VALUES (?,?,?,?,?)`);
 
+const existingMarket = db.prepare("SELECT id, status, projection FROM markets WHERE week=? AND player_id=? AND stat='ppr_pts'");
+
 const ingestWeek = db.transaction((week, players, schedule, fallbackKickoff) => {
   let created = 0;
   for (const pl of players) {
+    const ex = existingMarket.get(week, pl.player_id);
+    // never re-price a frozen/settled line; skip unchanged lines so rung ids don't churn
+    if (ex && ex.status !== 'OPEN') continue;
+    if (ex && ex.projection === pl.ppr_pts) continue;
     const g = schedule.get(pl.team);
     const kickoff = (g && g.date) || fallbackKickoff;
     const mid = upsertMarket.get({

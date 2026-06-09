@@ -195,6 +195,11 @@ main { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.9
 .feed .pill.parlay { color: var(--gold); background: var(--gold-soft); }
 .feed .amt { margin-left: auto; font-weight: 700; font-size: 13px; }
 .feed .amt.win { color: var(--win); } .feed .amt.lose { color: var(--loss); } .feed .amt.void { color: var(--faint); }
+.feed .amt.cashed { color: var(--accent2, var(--gold)); }
+.cashbtn { margin-top: 8px; width: 100%; background: transparent; border: 1px solid var(--gold); color: var(--gold); padding: 7px 10px; border-radius: var(--r-sm); font-weight: 700; font-size: 12.5px; cursor: pointer; transition: background .14s; }
+.cashbtn b { font-weight: 800; }
+@media (hover: hover) { .cashbtn:hover { background: var(--gold-soft); } }
+.cashbtn:active { transform: translateY(1px); }
 .feed .legline { color: var(--dim); font-size: 12.5px; margin-top: 5px; line-height: 1.5; }
 .feed .legline .ov { color: var(--over); font-weight: 700; } .feed .legline .un { color: var(--under); font-weight: 700; }
 .feed .legline .res { color: var(--faint); }

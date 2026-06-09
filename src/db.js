@@ -43,6 +43,39 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_legs_matchup ON bet_legs(matchup_id);
 `);
 
+// Allow the 'CASHED' bet status on databases whose CHECK predates cash-out.
+(function migrateBetsStatus() {
+  const sql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='bets'").get();
+  if (sql && !/CASHED/.test(sql.sql)) {
+    // legacy_alter_table so RENAME doesn't rewrite bet_legs' FK (bets) to bets_old
+    db.pragma('foreign_keys = OFF');
+    db.pragma('legacy_alter_table = ON');
+    db.exec(`
+      ALTER TABLE bets RENAME TO bets_old;
+      CREATE TABLE bets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL REFERENCES users(username),
+        week INTEGER NOT NULL,
+        type TEXT NOT NULL CHECK (type IN ('single','parlay')),
+        stake INTEGER NOT NULL CHECK (stake > 0),
+        combined_odds REAL NOT NULL,
+        potential INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','WON','LOST','VOID','CASHED')),
+        payout INTEGER NOT NULL DEFAULT 0,
+        placed_ts INTEGER NOT NULL,
+        settled_ts INTEGER
+      );
+      INSERT INTO bets SELECT id,username,week,type,stake,combined_odds,potential,status,payout,placed_ts,settled_ts FROM bets_old;
+      DROP TABLE bets_old;
+      CREATE INDEX IF NOT EXISTS idx_bets_feed ON bets(placed_ts DESC);
+      CREATE INDEX IF NOT EXISTS idx_bets_user ON bets(username);
+    `);
+    db.pragma('legacy_alter_table = OFF');
+    db.pragma('foreign_keys = ON');
+    console.log('[db] migrated bets status CHECK to include CASHED');
+  }
+})();
+
 const WEEKLY_GRANT = Number(process.env.BETTY_GRANT || 1000);
 
 // The active betting period. 0 = preseason/offseason lump; 1..18 = regular-season weeks.
