@@ -335,16 +335,24 @@ main { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.9
 @media (max-width: 540px) {
   .topbar { flex-wrap: wrap; gap: 8px 12px; padding: 11px 14px; }
   .brand-sub { display: none; }
-  .who, .wallet { order: 2; width: 100%; }
-  .mode-switch { order: 3; width: 100%; margin: 0; }
+  .who, .wallet { order: 1; width: auto; margin-left: auto; }   /* sit beside the logo */
+  .mode-switch { order: 2; width: 100%; margin: 6px 0 0; }      /* tabs on their own row */
   .mode { flex: 1; text-align: center; padding: 9px 0; }
   .who input { flex: 1; width: auto; }
-  .wallet { justify-content: space-between; }
+  .wallet { gap: 12px; }
+  .wallet .meName { font-size: 14px; }
   .mybets-summary { gap: 7px; }
   .ms { padding: 8px 10px; }
   .ms b { font-size: 15px; }
   .slip { left: 10px; right: 10px; width: auto; bottom: 10px; }
   .slip-legs { max-height: 180px; }
+}
+/* very tight screens: collapse the logo to "b." so the wallet stays on the top row */
+@media (max-width: 400px) {
+  .brand-rest { display: none; }
+  .wallet { gap: 9px; }
+  .wallet .stat label { font-size: 9px; }
+  .wallet .stat b { font-size: 13.5px; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 
