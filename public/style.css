@@ -52,6 +52,9 @@ input, button, select { font: inherit; color: inherit; }
 .btn:active { transform: translateY(1px); }
 .btn.ghost { background: transparent; color: var(--dim); border: 1px solid var(--line); }
 .btn.ghost:hover { color: var(--txt); border-color: var(--faint); filter: none; }
+.icon-btn { background: transparent; border: 1px solid var(--line); color: var(--dim); width: 36px; height: 36px; flex: none; border-radius: var(--r-sm); display: grid; place-items: center; padding: 0; cursor: pointer; transition: color .15s, border-color .15s, transform .12s var(--ease); }
+@media (hover: hover) { .icon-btn:hover { color: var(--txt); border-color: var(--faint); } }
+.icon-btn:active { transform: translateY(1px); }
 input, select {
   background: var(--surface-2); border: 1px solid var(--line); color: var(--txt);
   padding: 8px 11px; border-radius: var(--r-sm); outline: none; transition: border-color .15s;
@@ -332,9 +335,9 @@ main { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.9
 @media (max-width: 540px) {
   .topbar { flex-wrap: wrap; gap: 8px 12px; padding: 11px 14px; }
   .brand-sub { display: none; }
-  .mode-switch { order: 2; width: 100%; margin: 0; }
+  .who, .wallet { order: 2; width: 100%; }
+  .mode-switch { order: 3; width: 100%; margin: 0; }
   .mode { flex: 1; text-align: center; padding: 9px 0; }
-  .who, .wallet { order: 3; width: 100%; }
   .who input { flex: 1; width: auto; }
   .wallet { justify-content: space-between; }
   .mybets-summary { gap: 7px; }
