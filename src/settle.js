@@ -87,17 +87,19 @@ const openMatchupsForWeek = db.prepare(
 const setMatchupSettled = db.prepare('UPDATE matchups SET status=?, actual_a=?, actual_b=?, winner=? WHERE id=?');
 const openMatchupLegs = db.prepare("SELECT * FROM bet_legs WHERE matchup_id=? AND leg_kind='matchup' AND status='OPEN'");
 
-async function settleMatchups(week) {
+async function settleMatchups(week, pointsOverride) {
   const matchups = openMatchupsForWeek.all(week);
   if (matchups.length === 0) return { graded: 0, bets: 0 };
 
-  let points;
-  try {
-    const rows = await fetchMatchups(week);
-    points = new Map((rows || []).map((r) => [r.roster_id, r.points]));
-  } catch (e) {
-    console.warn(`[settle] matchup points fetch failed for week ${week}: ${e.message}`);
-    return { graded: 0, bets: 0, error: e.message };
+  let points = pointsOverride; // test hook: inject final scores (roster_id -> points)
+  if (!points) {
+    try {
+      const rows = await fetchMatchups(week);
+      points = new Map((rows || []).map((r) => [r.roster_id, r.points]));
+    } catch (e) {
+      console.warn(`[settle] matchup points fetch failed for week ${week}: ${e.message}`);
+      return { graded: 0, bets: 0, error: e.message };
+    }
   }
 
   const touched = new Set();

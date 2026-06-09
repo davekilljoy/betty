@@ -8,7 +8,8 @@
     "start": "node src/server.js",
     "ingest": "node src/cli.js ingest",
     "settle": "node src/cli.js settle",
-    "demo": "node src/cli.js demo"
+    "demo": "node src/cli.js demo",
+    "sim": "node src/sim.js"
   },
   "dependencies": {
     "@fastify/static": "^7.0.4",
